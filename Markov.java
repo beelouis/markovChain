@@ -78,7 +78,7 @@ class Markov{
   public static double getContSejProb(int s1, int s2, double[] rates, double TSC){
       int n = 1000000;
       // int n = 100;
-      int[] count = {0, 0, 0, 0};
+      int[] count = { 0, 0, 0, 0 };
 
       Turtle t = new Turtle(s1, 3, false, true);
       t.setContTransitions(rates);
@@ -98,7 +98,7 @@ class Markov{
               // tower sample while we are within the desired time range
               // if we have already surpassed TSC in the first deltaT for example, then
               // the state the turtle is in after TSC is the same state it started in
-              if (time < TSC) t.towerSample();
+              if (time < TSC) { t.towerSample(); }
               currentState = t.getState();
           }
         // increment counter for the state we are in after TSC time

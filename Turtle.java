@@ -18,9 +18,13 @@ class Turtle{
 
   private Random ran;
 
-  // ========================================================================================
-  // ======================== Constructor ===================================================
-  // ========================================================================================
+  /**
+    * Constructor:
+    * holds a complete transition table from each state to all others
+    * has a current state, as well as the local neighbour table to that state
+    * must have either inputted steady state probabilities, or all equal
+    * must be set to either continuous or discrete time
+  */
 
   public Turtle(int currentState, int numStates, boolean equalSSProb, boolean continuous){
     ran = new Random();
@@ -29,22 +33,42 @@ class Turtle{
     this.continuous = continuous;
   }
 
-  // ========================================================================================
-  // ========= Create Complete neighbour table for DTMC  ====================================
-  // ========================================================================================
+  // set equal steady state probabilities
 
+  public void setEqualSSProb(){
+    double[] ssprobs = new double[numStates];
+    for (int i = 0; i < ssprobs.length; i++) ssprobs[i] = (1.0 / numStates);
+    setSSProb(ssprobs);
+  }
+
+  // set the steady state probabilities to what the user specifies
+
+  public void inputSSProb(double[] ssprobs){
+    setSSProb(ssprobs);
+  }
+
+  // method for setting the ssprob
+
+  private void setSSProb(double[] ssprobs){
+    this.ssprobs = ssprobs;
+    this.ssprobCurrentState = ssprobs[currentState - 1];
+  }
+
+  /**
+    * Create a complete neighbour table for Discrete Time MC, and assign to turtle the current state's table:
+    * --------------------------------------------------------------------------------------------------
+    * this table never changes in all of n iterations of moving through the chain
+    * after changing state, the turtle simply has to get its new neighbours
+    * HashMap<>() localTable = mapping of neihbour states and probability of moving to that state
+    *                          for each ith state - i itself is not the state in the map
+    * then this local table is put into the complete hash table, with the ith state as the key
+  */
 
   public void setDiscreteNbrs(){
-    // this table never changes in all of n iterations of moving through the chain
-    // after changing state, the turtle simply has to get its new neighbours
     totalTable = new HashMap<>();
     for (int i = 1; i <= numStates; i++){
 
-      // the localTable is a mapping of neighbour states and the probability of moving to that state
-      // it is local to the ith state in the loop, where i is not actually in the map
       HashMap<Integer, Double> localTable = new HashMap<>();
-
-      // Using a HashSet because it will remove duplicate entries of ghost states which simplifies things
       HashSet<Integer> nbrs = calculateNbrs(i);
 
       // add the neighbours to the local table, with proposal probability of 1 / directions
@@ -56,9 +80,6 @@ class Turtle{
         double pacc = calcPAcc(ssprobTo, ssprobs[i-1]);
         double finalTrans = pacc * localTable.get(state);
 
-        // update the local table with new transition probabilities
-        // now, the transition probability of moving to a ghost state will be 0, instead of 1/4
-        // this wont contribute to the sum, so if there are any ghost states then (sum of probs != 1)
         localTable.put(state, finalTrans);
       }
 
@@ -68,22 +89,23 @@ class Turtle{
 
       // remove ghost state from the list of potential neighbours:
       localTable.remove(0);
-
-      // add an entry into the hashmap for the ith state, to its neighbours with their probabilities:
       totalTable.put(i, localTable);
     }
     // get the current state's neighbour table for immediate use
     nbrsTransProb = totalTable.get(currentState);
   }
 
-  // =========== Subroutine for getting all the neighbours for the markov chain =============
+  /**
+    * Subroutine called from setDiscreteNbrs() which is assigned to HashMap<>() localTable:
+    * ---------------------------------------------------------------------------------------
+    * check if the necessary move would take you outside the bounds of the grid
+    * being assigned a state of 0 represents a "ghost state"
+  */
 
   private HashSet<Integer> calculateNbrs(int fromState){
     Integer east, north, west, south;
     int sqrt = (int)Math.sqrt(numStates);
 
-    // check if the necessary move would take you outside the bounds of the grid
-    // being assigned a state of 0 represents a "ghost state"
     east  = (fromState % sqrt != 0)         ? fromState + 1     : 0;
     north = (fromState + sqrt <= numStates) ? fromState + sqrt  : 0;
     west  = ((fromState - 1) % sqrt != 0)   ? fromState - 1     : 0;
@@ -92,9 +114,32 @@ class Turtle{
     return new HashSet<>(Arrays.asList(east, north, west, south));
   }
 
-  // ========================================================================================
-  // =========== Create a local neighbour table for current state in CTMC ==================
-  // ========================================================================================
+  // Subroutine from setDiscreteNbrs()
+
+  private double calcSSProbTo(int state){
+    // State 0 denotes a ghost state; Steady state probability of leaving the chain is 0
+    return state == 0 ? 0.0 : ssprobs[state-1];
+  }
+
+  // Subroutine from setDiscreteNbrs()
+
+  private double calcPAcc(double ssprobTo, double ssprobFrom){
+    return Math.min(1, (ssprobTo / ssprobFrom) );
+  }
+
+
+  /**
+    * Create a total neighbour table for Continuous Time MC, and assign to turtle the current states' table:
+    * ----------------------------------------------------------------------------------------------------
+    * index is the element in the rates array that I begin the loop pulling rates from,
+    * and it will break after 2 loops since we only have 2 transitions per state
+    * "numstates - 1" accounts for skipping self transitions.
+    * 9 possible combinations of transitions (n^2), but only 6 (n^2-n) without self transition
+    * "fromState - 1" means that it starts the index of the rates array:
+    * at index 0 for state 1  : (2 * (1-1 = 0) = 0),
+    * at index 2 for state 2  : (2 * (2-1 = 1) = 2),
+    * at index 4 for state 3  : (2 * (3-1 = 2) = 4)
+  */
 
   public void setContTransitions(double[] rates){
     totalTable = new HashMap<>();
@@ -106,18 +151,8 @@ class Turtle{
             HashMap<Integer, Double> localTransProb = new HashMap<>();
 
               int index = (numStates - 1) * (fromState - 1);
-              // index is the element in the rates array that I begin pulling rates from,
-              // and it will break after 2 loops since we only have 2 transitions per state
-
-              // "numstates - 1" accounts for skipping self transitions.
-              // 9 possible combinations of transitions (n^2), but only 6 (n^2-n) without self transition
-              // "fromState - 1" means that it starts the index of the rates array:
-              //  at index 0 for state 1  : (2 * (1-1 = 0) = 0),
-              //  at index 2 for state 2  : (2 * (2-1 = 1) = 2),
-              //  at index 4 for state 3  : (2 * (3-1 = 2) = 4)
-
               for (int toState = 1; toState <= 3; toState++){
-                if (fromState == toState)  continue; // skip self transitions
+                if (fromState == toState) { continue; } // skip self transitions
                 else {
                   localContTable.put(toState, rates[index]);
                   index++;  // only increment through the rates array when we actually use one
@@ -141,13 +176,9 @@ class Turtle{
     // get currentState's neighbour tables for immediate use
     nbrsTransProb = totalTable.get(currentState);
     nbrsContRates = totalContRates.get(currentState);
-    // printContTransitionDetails();
   }
 
-  // ========================================================================================
-  // ================ Calculate DeltaT in CTMC ==============================================
-  // ========================================================================================
-
+  // Calculate DeltaT in CTMC: the amount of time that passes between steps
 
   public double calculateDeltaT(){
     double r = ran.nextDouble();
@@ -156,10 +187,8 @@ class Turtle{
     return deltaT;
   }
 
-  // ========================================================================================
-  // ======== Perform tower sampling to change state ========================================
-  // ========================================================================================
 
+  // Tower sample over possible states to stochastically move in the next time step
 
   public void towerSample(){
     // put all transition probabilitiies in arraylist, then order it highest to lowest
@@ -169,7 +198,7 @@ class Turtle{
     double[] t = new double[preT.size() + 1];
     t[0] = 0.0;
     for (int i = 1; i < t.length; i++){
-      // enter the ordered probabilities, after the 0.0 in index 0, into array t
+      // enter the ordered probabilities, AFTER the 0.0 in index 0, into array t
       t[i] = preT.get(i-1);
     }
 
@@ -184,17 +213,14 @@ class Turtle{
         break;
       }
     }
-    // printTowerSampleDetails(r, nextState);
     changeState(nextState);
   }
 
-  // ========= Subroutine for Tower sampling ================================================
+  // Subroutine from towerSample() which chooses between states with equal probabilities
 
   private int decideNextState(double prob){
-      // Randomly picks between states with the same probability
       ArrayList<Integer> possibleStates = new ArrayList<>();
       for (Integer state : nbrsTransProb.keySet()){
-        // if the probability of moving to this neighbour is the same as the one chosen in tower sampling, it is an option:
         if (nbrsTransProb.get(state) == prob){
           possibleStates.add(state);
         }
@@ -203,7 +229,7 @@ class Turtle{
       return possibleStates.get(r);
   }
 
-  // ========= Subroutine for Tower sampling ================================================
+  // Subroutine from towerSample() to change the turtle's state
 
   private void changeState(int nextState){
       currentState = nextState;
@@ -212,24 +238,15 @@ class Turtle{
       else              nbrsContRates = totalContRates.get(currentState);
   }
 
+  /**
+    * return the probability of moving to a specified state:
+    * if the proposed state is not a neighbour, return probability 0
+    * in CTMC, states are not neighbours to themselves, so this handles that as well
 
-  // ========================================================================================
-  // ========= getters, setters, and debuggers  =============================================
-  // ========================================================================================
+  */
 
   public double getTransProbTo(int nextState){
-    // if the proposed state is not a neighbour, return probability 0
-    // in CTMC, states are not neighbours to themselves, so this handles that as well
     return nbrsTransProb.containsKey(nextState) ? nbrsTransProb.get(nextState) : 0.0;
-  }
-
-  private double calcSSProbTo(int state){
-    // State 0 denotes a ghost state; Steady state probability of leaving the chain is 0
-    return state == 0 ? 0.0 : ssprobs[state-1];
-  }
-
-  private double calcPAcc(double ssprobTo, double ssprobFrom){
-    return Math.min(1, (ssprobTo / ssprobFrom) );
   }
 
   public int getState(){
@@ -240,41 +257,4 @@ class Turtle{
     changeState(state);
   }
 
-  public void setEqualSSProb(){
-    double[] ssprobs = new double[numStates];
-    for (int i = 0; i < ssprobs.length; i++) ssprobs[i] = (1.0 / numStates);
-    setSSProb(ssprobs);
-  }
-
-  public void inputSSProb(double[] ssprobs){
-    setSSProb(ssprobs);
-  }
-
-  private void setSSProb(double[] ssprobs){
-    this.ssprobs = ssprobs;
-    this.ssprobCurrentState = ssprobs[currentState - 1];
-  }
-
-
-  private void printTowerSampleDetails(double r, int nextState){
-    System.out.println("=====================================");
-    System.out.println("Current State: " + currentState);
-    nbrsTransProb.entrySet().forEach(e -> {
-      System.out.println("To State: " + e.getKey());
-      System.out.println("Prob: " + e.getValue());
-    });
-    System.out.println("R: " + r);
-    System.out.println("Changing to state: " + nextState);
-  }
-
-  private void printContTransitionDetails(){
-    nbrsContRates.entrySet().forEach(e -> {
-      System.out.println("state: " + e.getKey());
-      System.out.println("rate: " + e.getValue());
-    });
-    nbrsTransProb.entrySet().forEach(e -> {
-      System.out.println("state: " + e.getKey());
-      System.out.println("prob: " + e.getValue());
-    });
-  }
 }
